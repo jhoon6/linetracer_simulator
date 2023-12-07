@@ -17,7 +17,7 @@ Mat preprocess(Mat input){
 }
 
 
-int calc_err(Mat gray_img, int prev_error) {
+int calc_err(Mat gray_img) {
     static string dst2 = "appsrc ! videoconvert ! video/x-raw, format=BGRx ! nvvidconv ! nvv4l2h264enc insert-sps-pps=true ! h264parse ! rtph264pay pt=96 ! udpsink host=203.234.58.169 port=8002 sync=false";
     static VideoWriter writer2(dst2, 0, (double)30, Size(640, 90), true);
 
@@ -30,42 +30,25 @@ int calc_err(Mat gray_img, int prev_error) {
     static Point center_variable(320, 45);
     Rect fit;
 
-    static int error = 0;
-    int selected;
-    int sel_cnt=0;
+    int min_norm = INT_MAX;
 
+    Rect sel;
     for (int i = 1; i < cnt; i++) {
         int* p = stats.ptr<int>(i);
-        if ((p[4] < 1200) || (p[4]) > 33000) continue;
         Rect r(p[0], p[1], p[2], p[3]);
-        
-        //putText(dst, format("%d", i), Point(p[0] + 25, p[1] + 25), FONT_HERSHEY_SIMPLEX, 1, Scalar(255, 255, 0), 2);
+        rectangle(dst, r, Scalar(150, 150, 150), 1, 8);
 
         Point r_center = (r.br() + r.tl()) * 0.5;
+        int diff_length = norm(center_variable - r_center);
         drawMarker(dst, r_center, Scalar(0, 0, 255), 0, 10, 2, 8);
-        
-        if (p[1]+p[3] > 85) {
-            if(prev_error == 0) prev_error = 320 - r_center.x;
-            int diff = (-1*prev_error) - (320 - r_center.x);
-            //cout << "diff " << diff << endl;
-            if (diff < 180 && diff > -180 && norm(center_variable-r_center) < 150) {
-                error = 320 - r_center.x;
-                rectangle(dst, r, Scalar(0, 255, 255), 2);
-                //drawMarker(dst, findCentroid(cut_gray, r), Scalar(255, 128, 0), 1, 10, 2, 8);
-                center_variable = r_center;
-                selected = i;
-                sel_cnt++;
-            }
-            else {
-                rectangle(dst, r, Scalar(255, 255, 0), 2);
-            }
-        }
-        else {
-            rectangle(dst, r, Scalar(255, 255, 0), 2);
+        if (min_norm > diff_length && p[1] + p[3] > 60 && diff_length < 120) {
+            sel = r;
+            min_norm = diff_length;
+            center_variable = r_center;
         }
     }
-    if(sel_cnt >= 2) cout << "[WARN] MORE THAN TWO CANDIDATE! lastsel=" << selected << "/cnt=" << sel_cnt << endl;
+    if (!sel.empty()) rectangle(dst, sel, Scalar(0, 255, 255), 2);
     drawMarker(dst, center_variable, Scalar(255, 128, 255), 3, 10, 2, 8);
     writer2 << dst;
-    return error;
+    return 320 - center_variable.x;
 }
